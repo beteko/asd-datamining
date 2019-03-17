@@ -19,7 +19,7 @@ This project contains the below components
 - asd.pdf : PDF report highlighting the result obtained. Generated from asd.Rmd
 
 
-## REFERENCES 
+## References 
 
 1) Tabtah, F. (2017). Autism Spectrum Disorder Screening: Machine Learning Adaptation and DSM-5 Fulfillment. Proceedings of the 1st International Conference on Medical and Health Informatics 2017, pp.1-6. Taichung City, Taiwan, ACM. 
 
@@ -30,3 +30,5 @@ This project contains the below components
 4) Thabtah F, Kamalov F., Rajab K (2018) A new computational intelligence approach to detect autistic features for autism screening. International Journal of Medical Infromatics, Volume 117, pp. 112-124.
 
 5) https://www.nimh.nih.gov/health/topics/autism-spectrum-disorders-asd/index.shtml
+
+6) https://www.webmd.com/brain/autism/news/20101011/jaundice-in-newborns-may-be-linked-to-autism#1
