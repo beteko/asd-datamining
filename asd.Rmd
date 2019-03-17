@@ -1,0 +1,317 @@
+---
+title: "STUDY ON AUTISM SPECTRUM DISORDER "
+author: "EKPO Bognan Etienne"
+date: "17 March 2019"
+geometry: "left=3cm,right=3cm,top=2cm,bottom=2cm"
+output:
+  html_document: 
+    css: style.css
+  pdf_document: default
+documentclass: article
+classoption: a4paper
+
+---
+
+__To obtain all  ressources related to this report,  kindly visit__ <https://github.com/beteko/asd-datamining>
+
+
+
+### PROBLEM UNDERSTANDING  
+
+  Autism Spectrum Disorder (ASD) is a developmental disorder that affects communication and behavior. People with ASD have difficulty with social communication and interaction, restricted interests, and repetitive behaviors.[5]Although autism can be diagnosed at any age, it is said to be a “developmental disorder” because symptoms generally appear in the first two years of life [5]. It is Known as also "spectrum" disorder because there is a wide variety and intensity of the symptoms that can be observed in a subject. The causes of that disorder are still unclear despite several researches and hypotesis made over the year. Some research suggests that genes can act together with influences from the environment to affect development in ways that lead to ASD. Other studys claim that  newborns who have Jaundice are more likely to be diagnosed with Autism.[6]
+
+In view of the rapid growth in the number of ASD cases worldwide, it is crucial to investigate on the possible factors and cause of this disorder. Our study will therefore  focus on  exploring and mining available records collected from various subjects evaluated at an early stage in order to come up a pattern or association rules that might provide insight on the possible factors that leads to ASD as well as proposing a model that predicts the risks of a toddler deveoloping the disoder based on certain criteria. The study will seek to answer the following questions : 
+
+  - Is there any proof from the collected dataset that ASD  is linked to genes or/and Jaundice ?
+  - Can we exploit  any significant pattern between the symptoms and the gender/sex  , family history and Jaundice status  of the subjects ?
+  - Can we predict the risk level of a child/toddler developing  ASD based of his on  his sex/gender, origin/ethnicity and family history ?  
+
+__For more information on ASD, Please visit__ <https://en.wikipedia.org/wiki/Autism_spectrum> 
+
+### DATA UNDERSTANDING 
+
+The medical dataset used for this study was extracted from **Kaggle** and is composed of  1054 records with 19 features about toddlers across the world ranging from ages 1 to 3 years who have undergone some diagnostics to determine whehter or not they are in  one of the Spectrum of Autism.  This diagnostics is a 10 Multiple Choice Questions (Q-Chat-10) that evaluate several aspects of the mental condition of the subject. 
+Beside the questionaires of the diagnostic, other individuals characteristics that have proved to be effective in detecting the ASD cases from controls in behaviour science have also been collected using the ASDTests app. Find below sample and summary of the ASD dataset  
+ 
+
+```{r data_sample  , include = TRUE, echo= FALSE }
+
+  
+  # Function to install package in case does not exist 
+  installModule <- function( module_name ){
+    if (!require(module_name,character.only=TRUE, quietly = TRUE)) install.packages(module_name,character.only=TRUE, quietly = TRUE)
+  }
+
+  
+  ASD  <-  read.csv("asd.csv")
+  tail(ASD[2:19],2)
+  summary(ASD[12:19]) 
+  
+```
+
+
+Let us describe the the columns, their data types and descriptions
+
+* A1, A2 ... , A10 : ten behavioural features From (Q-Chat-10) 
+Attributes: A1-A10: Items within Q-Chat-10 in which questions possible answers : “Always, Usually, Sometimes, Rarly & Never” items’ values are mapped to “1” or “0” in the dataset. For questions 1-9 (A1-A9) in Q-chat-10, if the respose was Sometimes / Rarly / Never “1” is assigned to the question (A1-A9). However, for question 10 (A10), if the respose was Always / Usually / Sometimes then “1” is assigned to that question. 
+
+* Age_Mons :  Age of the toddler in months 
+* Qchat-10-Score: Score collected, If your child scores more than 3 (Q-chat-10- score) then there is a potential ASD traits otherwise no ASD traits are observed
+* Sex : Categorical ( m / f )
+* Ethnicity : Categorical (asian, Hispanic, Black, White European ... )
+* Jaundice:  (True/ False) Evaluating  presence or absence of Jaundice on the subject 
+* Family_mem_with_ASD :  (Yes/No) Is there a family member with ASD ?
+* Who completed the test : Categorical (Health Care Professional / Family member/ Self / Others  )
+* Class/ASD Traits:  Result of the diagnostic. Yes in case the subject is in the Spectrum and No if Not in the spectrum 
+
+It should be noted that the class variable was assigned automatically based on the score obtained by the user while undergoing the screening process using the ASDTests app.
+
+__For more information on the data used in our study, Please visit__ <https://www.kaggle.com/fabdelja/autism-screening-for-toddlers> 
+
+
+### DATA PREPARATION 
+
+The dataset does not contain any  missing values. However, we will assess the quality and validity of some records. 
+
+While Exploring the dataset, we noticed that some records were completed  by the children thenseves (eg. case No 50 ). Given the age of the toddlers ( 1 to 3 years ) we deem right to clean/invalidate those records along with all other entities (Others) that completed the form aside the family members and health Care professionals 
+
+```{r cleanin_self_records  , include = TRUE, echo= FALSE }
+  ASD <- subset(ASD, ASD$Who.completed.the.test != "Self" & ASD$Who.completed.the.test != "Others" ) 
+```
+
+Also in the same column(Who.completed.the.test), let's attend to a typo error by changing "Health care professional" to "Health Care Professional"
+
+```{r solving_typo_wctt  , include = TRUE, echo= FALSE }
+  ASD$Who.completed.the.test <-  gsub('Health care professional', 'Health Care Professional',ASD$Who.completed.the.test )
+```
+
+Prior to the description of the dataset  during the previous section ( DATA UNDERSTANDING ), We know that the feature/Column (Qchat-10-Score
+) is just the sum of all the scores obtained from question A1 to A10. This derived score is therefore  highly correlated with the Class/ASD-Traits since  a Toddler is dignosed with ASD whenever he/she obtained a score greater than three (3). We will therefore remove the QChat-10-Score from our dataset so as to prevent the model to overfit due to this strong assumption. 
+
+```{r removing_self_n_others  , include = TRUE, echo= FALSE }
+  ASD <- ASD[,-which(names(ASD) == "Qchat.10.Score")] 
+```
+
+Let us build an itemset(ASD.ITEMSET) based on the ASD dataframe in which caseNo feature represents the  [Transaction Ids] and all other selected attributes (A1 ..A10, Sex, Jaundice Status, Family memeber with ASD, ASD status) the items. This transformation will allow us to mine association rules between various features.
+
+```{r prepare_itemset , echo= FALSE , include = FALSE}
+ installModule("arules")
+ installModule("plyr")
+ installModule("dplyr")
+
+  library("arules")
+  library("plyr")
+  library("dplyr")
+
+
+ASD.ITEMSETS <- data.frame(CaseNo=integer(),
+                 Attributes=character())
+
+# Building CaseNo & Attributes (Answer)Set 
+for( i in 2: 11){ 
+  Tid   <-as.vector( subset(ASD, ASD[,i] == "1" )[,1] )
+  Items <- rep(paste( "A",i-1,sep = ""), length(Tid))
+  newRecords = matrix( c(Tid,Items), ncol =2 ) 
+  colnames(newRecords) <- c("CaseNo", "Attributes")
+  ASD.ITEMSETS <- rbind(ASD.ITEMSETS, newRecords)
+}
+
+# Building CaseNo & Attributes ( Sex ) Set 
+for( sex in c("m", "f") ){ 
+  Tid   <-as.vector( subset(ASD, ASD[,13] == sex )[,1] )
+  Items <- rep(paste( "SEX",toupper(sex) ,sep = "_"), length(Tid))
+  newRecords = matrix( c(Tid,Items), ncol =2 ) 
+  colnames(newRecords) <- c("CaseNo", "Attributes")
+  ASD.ITEMSETS <- rbind(ASD.ITEMSETS, newRecords)
+}
+
+# Building CaseNo & Attributes ( Jaundice ) Set 
+for( jaundice in c("yes", "no") ){ 
+  Tid   <-as.vector( subset(ASD, ASD[,15] == jaundice )[,1] )
+  Items <- rep(paste( "JAUNDICE",toupper( jaundice )  ,sep = "_"), length(Tid))
+  newRecords = matrix( c(Tid,Items), ncol =2 ) 
+  colnames(newRecords) <- c("CaseNo", "Attributes")
+  ASD.ITEMSETS <- rbind(ASD.ITEMSETS, newRecords)
+}
+
+
+# Building CaseNo & Attributes ( Family_mem_with_ASD ) Set 
+for( family_mem_with_ASD in c("yes", "no") ){ 
+  Tid   <-as.vector( subset(ASD, ASD[,16] == family_mem_with_ASD )[,1] )
+  Items <- rep(paste( "ASD_IN_FAMILY",toupper( family_mem_with_ASD )  ,sep = "_"), length(Tid))
+  newRecords = matrix( c(Tid,Items), ncol =2 ) 
+  colnames(newRecords) <- c("CaseNo", "Attributes")
+  ASD.ITEMSETS <- rbind(ASD.ITEMSETS, newRecords)
+}
+
+
+# Building CaseNo & Attributes ( ASD_Traits ) Set 
+for( ASD_Traits in c("Yes", "No") ){ 
+  Tid   <-as.vector( subset(ASD, ASD[,18] == ASD_Traits )[,1] )
+  Items <- rep(paste( "ASD_TRAITS",toupper( ASD_Traits )  ,sep = "_"), length(Tid))
+  newRecords = matrix( c(Tid,Items), ncol =2 ) 
+  colnames(newRecords) <- c("CaseNo", "Attributes")
+  ASD.ITEMSETS <- rbind(ASD.ITEMSETS, newRecords)
+}
+
+
+
+ASD.ITEMSETS <- split(x=ASD.ITEMSETS[,"Attributes"],f=ASD.ITEMSETS$CaseNo)
+ASD.ITEMSETS  <- as(ASD.ITEMSETS,"transactions")
+```
+
+Below is the ASD.ITEMSET Frequencies for every attributes 
+```{r ASD_itemset_freq  , include = TRUE, echo= FALSE }
+itemFrequencyPlot(ASD.ITEMSETS,support=.08,cex.names=1.5)
+```
+
+And a sample of the ASD itemset after transformation 
+```{r ASD_itemset_sample , include = TRUE, echo= FALSE }
+
+inspect( ASD.ITEMSETS[1000]  )
+```
+
+Finally we will split the dataset into Training and test set ( 78% Training set, 22% Testing Set)that will be  used  during the Modeling et Evaluation step 
+```{r ASD_dataset_train_test_slit , include = TRUE, echo= FALSE , warning=FALSE}
+ASD.len = nrow(ASD)
+installModule("caret")
+set.seed(3)
+p_train =  0.78
+p_test  = 1- p_train
+
+train.index <- createDataPartition(ASD$Class.ASD.Traits., p = p_train, list = FALSE)
+ASD.TRAINSET  <- ASD[ train.index,]
+ASD.TESTSET  <- ASD[-train.index,]
+
+print(paste("nrow of ASD.TRAINSET :", as.character(nrow( ASD.TRAINSET)) ,"| nrow of ASD.TESTSET :", as.character(nrow( ASD.TESTSET) )))
+
+```
+
+
+### MODELING  
+
+In this section, we will apply the Apriori Algorithm on  the generated ASD.ITEMSET with some contraints ( number_of_items >= 4, support >= 0.04 and confidence >= 40 %) in order to deduce the most relevant associations rules as shown below. The first 10 association rule will be selected being sorted by  LIFT in decreasing order. 
+
+```{r minining_association_asd_1   , include = TRUE, echo= FALSE  }
+ASD.RULE_1 <- apriori(ASD.ITEMSETS , parameter = list(sup = 0.04, conf = 0.4 ,target="rules", minlen = 4), 
+                                appearance = list(lhs= c("ASD_IN_FAMILY_YES","ASD_IN_FAMILY_NO" ,  "SEX_F", "SEX_M","JAUNDICE_YES","JAUNDICE_NO"), 
+                                                  rhs = c("ASD_TRAITS_YES","ASD_TRAITS_NO") ), control = list(verbose = FALSE))
+
+inspect(head(sort (ASD.RULE_1, by="lift", decreasing=TRUE), 10 ), verbose = FALSE)
+
+```
+
+We will focus on Rule [2] and [3] since they have a significant support and positive correlation ( lift > 1 ) and Rules [5] and  [6] for their relatively significant supports and negative correlations ( lift < 1 ) .  Those association rules suggest that male toddlers with a Positive Jaunice status and no family history of ASD  are more likely to be diagnosed with ASD than female with the same attributes. Also, Male with no trace of Jaunice and no family history of ASD are likewise more likely to be diagnosed with ASD than their female counterpart with the same observations. 
+
+
+```{r minining_association_asd_2,  include = TRUE, echo= FALSE }
+ASD.RULE_2 <- apriori(ASD.ITEMSETS , parameter = list(sup = 0.1, conf = 0.4,target="rules", minlen =5 ), 
+                                appearance = list( rhs = c("ASD_TRAITS_YES" )), control = list(verbose = FALSE) )
+
+ASD.RULE_2.SUB <- subset(ASD.RULE_2, subset = lhs %pin% "SEX_" & lhs %pin% "JAUNDICE_" & lhs %pin% "ASD_IN_FAMILY_")
+
+
+inspect(head(sort (ASD.RULE_2.SUB , by="lift", decreasing=TRUE), 2)) 
+
+# A lift value less (larger) than 1 indicates a negative (positive) dependence or substitution (complementary) effect. In our example, the # lift value equals 0.89, which clearly indicates the expected substitution effect between coffee and tea.
+
+
+```
+
+Per the above result (after observing more than 500 parttens ), we could not confidently  deduce any significant association rules between the symptoms (A1 - A10) and the ASD Positive Subject attributes (Gender, Jaundice Status and Family History ). 
+
+Based on previous surveys we will select the following features ( gender, Jaundice_status , family_member_with_ASD and Ethnicity)  in order to  propose a  classifier that will predict the risk of  a toddler before even taking the ASD Test/dianosis. We deem right to select a Classification and Regression Tree (CART) for this purpose firt of all because of its intepretability as we are in the medical field as well as its performance in classification task under limited number of features. We will initially train our model on the training set  ( ASD.TRAINSET ) and visualize the initial decision tree.  
+
+
+```{r applying_machine_learning_model_decision_tree , include = TRUE, echo= FALSE,  fig.height = 3, fig.width = 8, fig.align = "center"  }
+
+# Classification Tree with rpart
+library(rpart)
+
+# grow tree 
+ASD.INIT_MODEL <- rpart(ASD.TRAINSET$Class.ASD.Traits. ~ ASD.TRAINSET$Sex + ASD.TRAINSET$Ethnicity +ASD.TRAINSET$Jaundice + ASD.TRAINSET$Family_mem_with_ASD,
+   method="class", data=ASD.TRAINSET)
+
+# plot tree 
+plot(ASD.INIT_MODEL, uniform=TRUE, main="Classification Tree for ASD")
+text(ASD.INIT_MODEL, use.n=TRUE, all=TRUE, cex=.6)
+
+
+```
+
+### MODEL EVALUATION 
+
+In order to obtain an accurate measure of the performance of our Decision Tree Classifier and select the optimal hyperparameters, we applied a 10-Fold Cross Validation on our training (ASD.TRAINSET) set while tuning the complexity parameter of the model with the seed set to 3 . 
+
+Find below the details associated with the model evaluation and hyperparemeter selection.   
+
+```{r evaluating_decision_tree  , include = TRUE, echo= FALSE ,  fig.height = 4, fig.width = 8 }
+installModule("caret")
+library(caret)
+
+# Set the see value 
+set.seed(3)
+
+# Initialize the train control  for Cross Validation 
+train_control <- trainControl(method="cv", number=10)
+
+# Training on every fold and keeping track of the accuracy
+ASD.FINAL_MODEL <- train(Class.ASD.Traits. ~  Sex + Ethnicity + Jaundice + Family_mem_with_ASD, data = ASD.TRAINSET, method = "rpart", trControl=train_control,  parms = list(split = "gini"), tuneLength =10)
+
+# Displaying the result 
+print(ASD.FINAL_MODEL)
+
+# Plotting the Result ( Accuracy  against Complexity param )
+plot(ASD.FINAL_MODEL, uniform=TRUE, 
+   main="Classification Tree 10 Fold Cross Validation")
+
+
+```
+ 
+  Per the result above, the best complexity parameter selected is 0.0118  which yield a score of  0.70.  We will now apply the best-performing classifier on the test dataset  and generate the confusion matrix to observe the specificity and sensitivity of the model towards test subjects (ASD.TESTSET).
+
+```{r testing_final_decision_tree , include = TRUE, echo= FALSE }
+
+ASD.PREDGINI <- predict(ASD.FINAL_MODEL, newdata = subset(ASD.TESTSET, select = c( "Sex" , "Jaundice" , "Ethnicity", "Family_mem_with_ASD")))
+confusionMatrix(ASD.PREDGINI, ASD.TESTSET$Class.ASD.Traits. ) 
+
+```
+
+  The specificity and sensitivity of the model demonstate the accuracy of the model in classifying the subject with ASD. Again,one need to note that a new subject classified as ASD positive by the model does not imply that the subject has the disorder but rather is at risk of developping ASD.
+
+&nbsp;
+
+&nbsp;
+
+&nbsp;
+
+&nbsp;
+
+### CONCLUSION 
+
+
+This studies allowed us  to  explore  various patterns and possible association between Toddlers with ASD Traits and their family history,  sex/gender, ethnicity , Jaundice status , Symptoms  and many others.  Per the result obtained in the section above ,we can counclude that ASD is strongly associated with genes and the likelihood of male with Jaundice developping the disorder is more important than in female. 
+Exploration of the dataset did not provide any clear association betwen the symptoms (A1 ... A10 ) and the subject attributes.
+
+Beside the above findings, we also proposed a relatively accurate Descision Tree classifier (CART) based on the ASD dataset that could predict  whether a child might be at risk of having ASD based on his gender, family history, jaunice status and origin. This aims at helping  doctors around the world to know the likelihood  of a toddler developping the disorder before even undergoing the ASD test. 
+
+
+
+
+### REFERENCES 
+
+1) Tabtah, F. (2017). Autism Spectrum Disorder Screening: Machine Learning Adaptation and DSM-5 Fulfillment. Proceedings of the 1st International Conference on Medical and Health Informatics 2017, pp.1-6. Taichung City, Taiwan, ACM. 
+
+2) Thabtah, F. (2017). ASDTests. A mobile app for ASD screening. www.asdtests.com [accessed December 20th, 2017]. 
+
+3) Thabtah, F. (2017). Machine Learning in Autistic Spectrum Disorder Behavioural Research: A Review. Informatics for Health and Social Care Journal. 
+
+4) Thabtah F, Kamalov F., Rajab K (2018) A new computational intelligence approach to detect autistic features for autism screening. International Journal of Medical Infromatics, Volume 117, pp. 112-124.
+
+5) https://www.nimh.nih.gov/health/topics/autism-spectrum-disorders-asd/index.shtml
+ 
+6) https://www.webmd.com/brain/autism/news/20101011/jaundice-in-newborns-may-be-linked-to-autism#1
+
+7) https://www.kaggle.com/fabdelja/autism-screening-for-toddlers/version/1
+
+ 
